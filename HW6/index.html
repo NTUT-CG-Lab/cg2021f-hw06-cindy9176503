@@ -12,6 +12,7 @@
             <a href="https://pytorch3d.org/tutorials/deform_source_mesh_to_target_mesh">
                 Deform a source mesh to form a target mesh using 3D loss functions</a><br>
         </div>
+		<div style="position:absolute;top:15%;left:50%;"><p id="modelNum">iter #0</p></div>
 
 		<script src="scoreoutputer.min.js"></script>
 		<script>
@@ -117,7 +118,7 @@
                 const loader = new PLYLoader();
 
 				// Load original model according to model_id
-				loader.load( './models/dolphin.ply', function ( geometry ) {
+				loader.load('./models/dolphin.ply', function ( geometry ) {
 
 					const material = new THREE.MeshPhongMaterial( { color: 0xFF5555, specular: 0x111111, shininess: 200 } );
 					geometry.computeVertexNormals();
@@ -137,33 +138,57 @@
 				const material = new THREE.MeshPhongMaterial( { color: 0xAAAAAA, specular: 0x111111, shininess: 200 } );
 				
 				// Load models of pytorch3d 
-				loader.load( './models/dolphin/model_2000.ply', 
-				function ( geometry ) {
+				// loader.load( './models/dolphin/model_2000.ply', 
+				models.forEach(element => 
+					loader.load('./models/dolphin/model_' + element.toString() + '.ply',
+						function ( geometry ) {
+							geometry.computeVertexNormals();
 
-					geometry.computeVertexNormals();
+							const mesh = new THREE.Mesh( geometry, material );
 
-                    const mesh = new THREE.Mesh( geometry, material );
+							mesh.name = element;
+							mesh.position.set( 0.5, -0.5, 0 );
+							mesh.scale.multiplyScalar( 1.5 );
 
-                    mesh.position.set( 0.5, -0.5, 0 );
-					mesh.scale.multiplyScalar( 1.5 );
+							mesh.castShadow = true;
+							mesh.receiveShadow = true;
 
-                    mesh.castShadow = true;
-                    mesh.receiveShadow = true;
-					
-                    scene.add( mesh );
-                } );
+							if(element != 0) {
+								mesh.visible = false;
+							}
 
+							scene.add( mesh );
+						} 
+					)
+				);
+								
+				const effectController = {step:1};
+				let currentIter = effectController.step;
+				function iterChange() {
+					if(currentIter == effectController.step) return;
+					currentIter = effectController.step;
+					var textTag = document.getElementById('modelNum');
+					textTag.innerText = "iter #" + models[currentIter-1].toString();
+					for(let i=0; i<models.length; i++) {
+						let item = scene.getObjectByName(models[i]);
+						if(i != currentIter-1 && item.visible == true) {
+							item.visible = false;
+						}else if(i == currentIter-1) {
+							item.visible = true;
+						}
+					}
+				}
 
-
+				const gui = new GUI();
+				gui.add(effectController, 'step', 1, models.length, 1).onChange(iterChange);
 
 				// Lights
-
 				scene.add( new THREE.HemisphereLight( 0x443333, 0x111122 ) );
 
 				addShadowedLight( 1, 1, 1, 0xffffff, 1.35 );
 				addShadowedLight( 0.5, 1, - 1, 0xffaa00, 1 );
-				// renderer
 
+				// renderer
 				renderer = new THREE.WebGLRenderer( { antialias: true } );
 				renderer.setPixelRatio( window.devicePixelRatio );
 				renderer.setSize( window.innerWidth, window.innerHeight );
