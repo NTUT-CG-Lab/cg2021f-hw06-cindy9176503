@@ -12,13 +12,20 @@
             <a href="https://pytorch3d.org/tutorials/deform_source_mesh_to_target_mesh">
                 Deform a source mesh to form a target mesh using 3D loss functions</a><br>
         </div>
-		<div style="position:absolute;top:15%;left:50%;"><p id="modelNum">iter #0</p></div>
+		<div style="position:absolute;top:15%;left:48.5%;"><p id="modelNum">iter #0</p></div>
+		<div style="position:absolute;bottom:5%;left: 47.5%;">
+			<select name="selectModel" id="selectModel">
+				<option value=0>dolphin</option>
+				<option value=1>cat</option>
+				<!-- <option value=2>couch</option> -->
+			</select>
+		</div>
 
 		<script src="scoreoutputer.min.js"></script>
 		<script>
 			// 建構子 ScoreOutputer 接受一個字串，該字串為 csv 的檔案名稱
 			// 以下面範例，檔名就為 "109598105(總分: 6).csv"
-			var so = new ScoreOutputer("109598105");
+			var so = new ScoreOutputer("110598068");
 			so.installCSS(function(){
 				// 安裝 bootstrap 的 css，如果在 html 上方引用 bootstrap 5.1.1 的話就不用使用 installCSS ，注意一定要 bootstrap css 5.1.1 版
 				// installCSS 接收一個 callback 當作參數，作為成功安裝 bootstrap css 的回呼函式
@@ -31,9 +38,9 @@
 				//addChild 要比 renderModal 先呼叫
 				so.addChild("場景顯示目標模型", 1, true);
 				so.addChild("場景顯示成果模型", 1, true);
-				so.addChild("執行pytorch3D程式碼產生25個模型", 2, false);
-				so.addChild("可拖動GUI顯示不同階段模型", 3, false);
-				so.addChild("可更換其他模型", 3, false);
+				so.addChild("執行pytorch3D程式碼產生25個模型", 2, true);
+				so.addChild("可拖動GUI顯示不同階段模型", 3, true);
+				so.addChild("可更換其他模型", 3, true);
 		
 				//產生自評表，參數如下所示
 				so.renderModal(
@@ -66,6 +73,7 @@
 				);
 			});
 		</script>
+
 		<script type="module">
 
 			import * as THREE from './build/three.module.js';
@@ -78,9 +86,18 @@
 			let container;
 
 			let camera, cameraTarget, scene, renderer;
+			let gui = null;
 
 			// The iterations of pytorch3d models
             const models = [0,5,10,20,30,40,50,60,80,100,130,160,190,220,250,300,400,500,600,800,1000,1250,1500,1750,2000];
+			const modelsName = ['dolphin', 'cat'];
+			const modelsRotationY = [0, 30, 30];
+			const modelScalar = [1.5, 0.0015, 0.001];
+
+			let modelsList = [];
+			let prototypeModel;
+			let modelIdx = 0;
+			let effectController;
 
 			init();
 			animate();
@@ -101,7 +118,6 @@
 				scene.fog = new THREE.Fog( 0x72645b, 2, 15 );
 
 				// Ground
-
 				const plane = new THREE.Mesh(
 					new THREE.PlaneGeometry( 40, 40 ),
 					new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } )
@@ -111,76 +127,9 @@
 				scene.add( plane );
 
 				plane.receiveShadow = true;
-
-
-				// PLY model files
-
-                const loader = new PLYLoader();
-
-				// Load original model according to model_id
-				loader.load('./models/dolphin.ply', function ( geometry ) {
-
-					const material = new THREE.MeshPhongMaterial( { color: 0xFF5555, specular: 0x111111, shininess: 200 } );
-					geometry.computeVertexNormals();
-
-					const mesh = new THREE.Mesh( geometry, material );
-
-					mesh.position.set( -0.5, -0.5, 0 );
-					mesh.scale.multiplyScalar( 1.5 );
-
-					mesh.castShadow = true;
-					mesh.receiveShadow = true;
-
-					scene.add( mesh );
-				} );
-
-				// The material for pytorch3d model
-				const material = new THREE.MeshPhongMaterial( { color: 0xAAAAAA, specular: 0x111111, shininess: 200 } );
 				
-				// Load models of pytorch3d 
-				// loader.load( './models/dolphin/model_2000.ply', 
-				models.forEach(element => 
-					loader.load('./models/dolphin/model_' + element.toString() + '.ply',
-						function ( geometry ) {
-							geometry.computeVertexNormals();
-
-							const mesh = new THREE.Mesh( geometry, material );
-
-							mesh.name = element;
-							mesh.position.set( 0.5, -0.5, 0 );
-							mesh.scale.multiplyScalar( 1.5 );
-
-							mesh.castShadow = true;
-							mesh.receiveShadow = true;
-
-							if(element != 0) {
-								mesh.visible = false;
-							}
-
-							scene.add( mesh );
-						} 
-					)
-				);
-								
-				const effectController = {step:1};
-				let currentIter = effectController.step;
-				function iterChange() {
-					if(currentIter == effectController.step) return;
-					currentIter = effectController.step;
-					var textTag = document.getElementById('modelNum');
-					textTag.innerText = "iter #" + models[currentIter-1].toString();
-					for(let i=0; i<models.length; i++) {
-						let item = scene.getObjectByName(models[i]);
-						if(i != currentIter-1 && item.visible == true) {
-							item.visible = false;
-						}else if(i == currentIter-1) {
-							item.visible = true;
-						}
-					}
-				}
-
-				const gui = new GUI();
-				gui.add(effectController, 'step', 1, models.length, 1).onChange(iterChange);
+				LoadModel();
+				LoadGUI();
 
 				// Lights
 				scene.add( new THREE.HemisphereLight( 0x443333, 0x111122 ) );
@@ -201,12 +150,89 @@
 				//
 
 				window.addEventListener( 'resize', onWindowResize );
-
 			}
 
-            
-			function addShadowedLight( x, y, z, color, intensity ) {
+            function LoadModel() {
+				// PLY model files
+                const loader = new PLYLoader();
 
+				// Load original model according to model_id
+				loader.load('./models/'+modelsName[modelIdx]+'.ply', function ( geometry ) {					
+					const material = new THREE.MeshPhongMaterial( { color: 0xFF5555, specular: 0x111111, shininess: 200 } );
+					geometry.computeVertexNormals();
+
+					const mesh = new THREE.Mesh( geometry, material );
+
+					mesh.position.set( -0.5, -0.5, 0 );
+					mesh.rotation.y =  modelsRotationY[modelIdx];
+					mesh.scale.multiplyScalar(modelScalar[modelIdx]);
+
+					mesh.castShadow = true;
+					mesh.receiveShadow = true;
+					prototypeModel = mesh;
+
+					scene.add(mesh);
+				} );
+
+				// The material for pytorch3d model
+				const material = new THREE.MeshPhongMaterial( { color: 0xAAAAAA, specular: 0x111111, shininess: 200 } );
+				
+				// Load models of pytorch3d
+				models.forEach(element => 
+					loader.load('./models/'+modelsName[modelIdx]+'/model_' + element.toString() + '.ply',
+						function ( geometry ) {
+							geometry.computeVertexNormals();
+
+							const mesh = new THREE.Mesh( geometry, material );
+
+							mesh.name = element;
+							mesh.position.set( 0.5, -0.5, 0 );
+							mesh.rotation.y = modelsRotationY[modelIdx];
+							mesh.scale.multiplyScalar(modelScalar[modelIdx]);
+
+							mesh.castShadow = true;
+							mesh.receiveShadow = true;
+							modelsList.push(mesh);
+							
+							if(element != 2000) {
+								mesh.visible = false;
+							}
+
+							scene.add(mesh);								
+						} 
+					)
+				);
+			}
+
+			function LoadGUI() {
+				if(gui == null) {
+					gui = new GUI();
+				}else{
+					gui.domElement.remove();
+					gui = new GUI();
+				}
+
+				effectController = {step:1};
+				let currentIter = effectController.step;
+				function iterChanger() {
+					if(currentIter == effectController.step) return;
+					currentIter = effectController.step;
+					var textTag = document.getElementById('modelNum');
+					textTag.innerText = "iter #" + models[currentIter-1].toString();
+					for(let i=0; i<models.length; i++) {
+						let item = scene.getObjectByName(models[i]);
+						if(i != currentIter-1 && item.visible == true) {
+							item.visible = false;
+						}else if(i == currentIter-1) {
+							item.visible = true;
+						}
+					}
+				}
+
+				gui.add(effectController, 'step', 1, models.length, 1).onChange(iterChanger);
+			}
+			
+			function addShadowedLight( x, y, z, color, intensity ) {
 				const directionalLight = new THREE.DirectionalLight( color, intensity );
 				directionalLight.position.set( x, y, z );
 				scene.add( directionalLight );
@@ -223,28 +249,22 @@
 				directionalLight.shadow.camera.far = 4;
 
 				directionalLight.shadow.bias = - 0.002;
-
 			}
 
 			function onWindowResize() {
-
 				camera.aspect = window.innerWidth / window.innerHeight;
 				camera.updateProjectionMatrix();
 
 				renderer.setSize( window.innerWidth, window.innerHeight );
-
 			}
 
 			function animate() {
-
 				requestAnimationFrame( animate );
 
 				render();
-
 			}
 
 			function render() {
-
 				const timer = Date.now() * 0.0005;
 
 				camera.position.x = Math.cos( timer ) * 3;
@@ -253,7 +273,23 @@
 				camera.lookAt( cameraTarget );
 
 				renderer.render( scene, camera );
+			}
 
+			SelectModel();
+			function SelectModel() {
+				var selectModelList = document.querySelector('#selectModel');
+				selectModelList.addEventListener('change', (event) => {
+					modelsList.forEach(function(value){
+						scene.remove(value);
+					});
+					modelsList = [];
+
+					scene.remove(prototypeModel);
+
+					modelIdx = selectModelList.value;
+					LoadModel();
+					LoadGUI();
+				});
 			}
 
 		</script>
